@@ -1,9 +1,14 @@
+import logging
 import configparser
 from os import path
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 import json
 
+from geopy.distance import vincenty
 import requests
+
+log = logging.getLogger(__name__)
+
 
 class Climate(object):
 
@@ -13,7 +18,8 @@ class Climate(object):
         self.header = {'Authorization': 'Token {}'.format(self._get_api_token(configfile)),
                        'Origin': 'https://www.serch.us'}
 
-    def _get_config_file(self, configfile):
+    @staticmethod
+    def _get_config_file(configfile):
 
         configpath = path.join(path.dirname(__file__), configfile)
         if not path.exists(configpath):
@@ -38,8 +44,45 @@ class Climate(object):
         else:
             raise KeyError('api_token not found in {}'.format(configfile))
 
-    def get(self, url, params=None):
-        response = requests.get(urljoin(self.baseurl,url),
-                                params=params,
-                                headers=self.header)
-        return json.loads(response.content.decode())
+    def _get(self, url, params=None):
+
+        if not bool(urlparse(url).netloc):
+            url = urljoin(self.baseurl,url)
+        try:
+            response = requests.get(url,
+                                    params=params,
+                                    headers=self.header)
+            response.raise_for_status()
+            log.info(response.url)
+            result = json.loads(response.content.decode())
+            return result
+        except requests.exceptions.RequestException as e:
+            log.error(e)
+            raise e
+
+
+class City(Climate):
+
+    def __init__(self, lat, lon):
+        super().__init__()
+        self.lat = lat
+        self.lon = lon
+        self._feature = self._nearest_city()
+        self.id = self._feature['id']
+
+    def _nearest_city(self):
+        result = super()._get('city/nearest',
+                              {'lat': self.lat,
+                               'lon': self.lon})
+        return result['features'][0]
+
+    def get_offset(self):
+
+        pt1 = (self.lon, self.lat)
+        pt2 = tuple(self._feature['geometry']['coordinates'])
+        return vincenty(pt1, pt2).kilometers
+
+    def get_boundary(self):
+
+        return super()._get('city/{}/boundary'.format(self.id))
+
