@@ -6,6 +6,9 @@ import json
 
 from geopy.distance import vincenty
 import requests
+import pandas as pd
+import pprint
+
 
 log = logging.getLogger(__name__)
 
@@ -60,29 +63,76 @@ class Climate(object):
             log.error(e)
             raise e
 
+    def model(self, name=None):
+        if name:
+            return self._get('model/{}'.format(name))
+        else:
+            return self._get('model/')
+
+    def scenario(self, name=None):
+        if name:
+            return self._get('scenario/{}'.format(name))
+        else:
+            return self._get('scenario/')
+
+    def indicator(self, name=None):
+        if name:
+            return self._get('indicator/{}'.format(name))
+        else:
+            return self._get('indicator/')
+
 
 class City(Climate):
 
-    def __init__(self, lat, lon):
+    def __init__(self, lon=None, lat=None, name=None, admin=None):
         super().__init__()
-        self.lat = lat
         self.lon = lon
-        self._feature = self._nearest_city()
-        self.id = self._feature['id']
+        self.lat = lat
+        self.name = name
+        self.admin = admin
+        if lon and lat:
+            self._feature = self._nearest(lon, lat)
+        elif name and admin:
+            self._feature = self._query(name, admin)
+        if self._feature:
+            self.id = self._feature['id']
+        else:
+            self.id = None
 
-    def _nearest_city(self):
-        result = super()._get('city/nearest',
-                              {'lat': self.lat,
-                               'lon': self.lon})
-        return result['features'][0]
+    def __repr__(self):
+        return pprint.saferepr(self._feature['properties'])
 
-    def get_offset(self):
+    def _nearest(self, lon, lat):
+        result = self._get('city/nearest',
+                              {'lon': lon,
+                               'lat': lat})
+        if result['features']:
+            return result['features'][0]
+        else:
+            return None
 
-        pt1 = (self.lon, self.lat)
-        pt2 = tuple(self._feature['geometry']['coordinates'])
-        return vincenty(pt1, pt2).kilometers
+    def _query(self, name, admin):
+        result = self._get('city', params={'name': name,
+                                           'admin': admin})
+        if result['features']:
+            return result['features'][0]
+        else:
+            return None
 
-    def get_boundary(self):
+    def offset(self):
+        if self.lon and self.lat:
+            pt1 = (self.lon, self.lat)
+            pt2 = tuple(self._feature['geometry']['coordinates'])
+            return vincenty(pt1, pt2).kilometers
+        else:
+            return None
 
-        return super()._get('city/{}/boundary'.format(self.id))
+    def boundary(self):
+        return self._get('city/{}/boundary'.format(self.id))
+
+    def data(self, scenario, indicator):
+        d = self._get('climate-data/{}/{}/indicator/{}/'\
+                      .format(self.id, scenario, indicator))
+        return pd.DataFrame(d['data']).transpose()
+
 
