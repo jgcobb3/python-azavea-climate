@@ -81,6 +81,18 @@ class Climate(object):
         else:
             return self._get('indicator/')
 
+    def city(self, id=None, url='city/', cities=[]):
+        if id:
+            return self._get('city/{}'.format(id))
+        else:
+            result = self._get(url)
+
+            cities = cities + result['features']
+            if result['next']:
+                return self.city(url=result['next'], cities=cities)
+            else:
+                return cities
+
 
 class City(Climate):
 
@@ -94,6 +106,8 @@ class City(Climate):
             self._feature = self._nearest(lon, lat)
         elif name and admin:
             self._feature = self._query(name, admin)
+        else:
+            self._feature = None
         if self._feature:
             self.id = self._feature['id']
         else:
