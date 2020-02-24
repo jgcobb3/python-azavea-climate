@@ -1,5 +1,5 @@
 backports-abc==0.5
-bleach==2.0.0
+bleach==3.1.1
 certifi==2017.4.17
 chardet==3.0.4
 cycler==0.10.0
